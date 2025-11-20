@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Lock, Globe } from "lucide-react";
+import { Users, Lock, Globe, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,7 @@ type InviteCodeFormValues = z.infer<typeof inviteCodeSchema>;
 export function JoinLeagueDialog() {
   const [open, setOpen] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -237,6 +238,16 @@ export function JoinLeagueDialog() {
     }
   };
 
+  // Filter leagues based on search query
+  const filteredLeagues = publicLeagues?.filter((league) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      league.name.toLowerCase().includes(query) ||
+      league.description?.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -260,6 +271,16 @@ export function JoinLeagueDialog() {
           </TabsList>
 
           <TabsContent value="browse" className="space-y-4 mt-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leagues..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
@@ -271,9 +292,9 @@ export function JoinLeagueDialog() {
                   </Card>
                 ))}
               </div>
-            ) : publicLeagues && publicLeagues.length > 0 ? (
+            ) : filteredLeagues && filteredLeagues.length > 0 ? (
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                {publicLeagues.map((league) => (
+                {filteredLeagues.map((league) => (
                   <Card key={league.id} className="hover:border-primary/50 transition-colors">
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -315,6 +336,13 @@ export function JoinLeagueDialog() {
                     </CardHeader>
                   </Card>
                 ))}
+              </div>
+            ) : searchQuery.trim() ? (
+              <div className="text-center py-12">
+                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">
+                  No leagues match your search
+                </p>
               </div>
             ) : (
               <div className="text-center py-12">
