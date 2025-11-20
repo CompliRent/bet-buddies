@@ -85,7 +85,7 @@ export function CreateLeagueDialog() {
     setIsSubmitting(true);
 
     try {
-      const inviteCode = values.is_private ? generateInviteCode() : null;
+      const inviteCode = generateInviteCode();
 
       const { data, error } = await supabase
         .from("leagues")
@@ -104,9 +104,7 @@ export function CreateLeagueDialog() {
 
       toast({
         title: "Success!",
-        description: inviteCode
-          ? `League created! Invite code: ${inviteCode}`
-          : "League created successfully!",
+        description: `League created! Invite code: ${inviteCode}`,
       });
 
       // Refresh the leagues list
