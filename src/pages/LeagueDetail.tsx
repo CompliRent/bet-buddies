@@ -5,24 +5,75 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import Header from "@/components/Header";
-import { ArrowLeft, Trophy, TrendingUp, TrendingDown, Users, Calendar, Settings, DollarSign } from "lucide-react";
+import { LeagueSettingsDialog } from "@/components/LeagueSettingsDialog";
+import { ArrowLeft, Trophy, TrendingUp, TrendingDown, Users, Calendar, DollarSign, Copy, Check } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { format } from "date-fns";
 
 const LeagueDetail = () => {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [copiedCode, setCopiedCode] = useState(false);
 
-  // Mock league data
-  const league = {
-    id: id,
-    name: "Weekend Warriors",
-    description: "Competitive weekend betting league for NFL and NBA games",
-    members: 12,
-    created: "Jan 15, 2024",
-    privacy: "Private",
-    entryFee: "$20",
-  };
+  const { data: league, isLoading } = useQuery({
+    queryKey: ["league", id],
+    queryFn: async () => {
+      if (!id) throw new Error("League ID is required");
 
-  // Mock leaderboard data
+      const { data, error } = await supabase
+        .from("leagues")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  const { data: memberCount } = useQuery({
+    queryKey: ["league-members-count", id],
+    queryFn: async () => {
+      if (!id) return 0;
+
+      const { count, error } = await supabase
+        .from("league_members")
+        .select("*", { count: "exact", head: true })
+        .eq("league_id", id);
+
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!id,
+  });
+
+  const { data: currentUserMembership } = useQuery({
+    queryKey: ["league-membership", id, user?.id],
+    queryFn: async () => {
+      if (!id || !user?.id) return null;
+
+      const { data, error } = await supabase
+        .from("league_members")
+        .select("role")
+        .eq("league_id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id && !!user?.id,
+  });
+
+  // Mock leaderboard data - will be replaced with real data later
   const leaderboard = [
     { rank: 1, username: "SportsFanatic", wins: 24, losses: 8, winRate: 75, points: 1240 },
     { rank: 2, username: "BetMaster99", wins: 22, losses: 10, winRate: 69, points: 1180 },
@@ -34,7 +85,7 @@ const LeagueDetail = () => {
     { rank: 8, username: "BetSmart", wins: 14, losses: 18, winRate: 44, points: 750 },
   ];
 
-  // Mock recent bets data
+  // Mock recent bets data - will be replaced with real data later
   const recentBets = [
     {
       id: 1,
@@ -85,6 +136,48 @@ const LeagueDetail = () => {
     }
   };
 
+  const copyInviteCode = () => {
+    if (league?.invite_code) {
+      navigator.clipboard.writeText(league.invite_code);
+      setCopiedCode(true);
+      toast({
+        title: "Copied!",
+        description: "Invite code copied to clipboard",
+      });
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  const isOwner = currentUserMembership?.role === "owner";
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-64 mb-4" />
+          <Skeleton className="h-4 w-96 mb-8" />
+          <div className="grid gap-4 md:grid-cols-4 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!league) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <p className="text-muted-foreground">League not found</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -100,12 +193,17 @@ const LeagueDetail = () => {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground">{league.name}</h1>
-              <p className="text-muted-foreground mt-2">{league.description}</p>
+              <p className="text-muted-foreground mt-2">{league.description || "No description"}</p>
             </div>
-            <Button variant="outline" className="gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </Button>
+            {isOwner && (
+              <LeagueSettingsDialog
+                leagueId={league.id}
+                currentName={league.name}
+                currentDescription={league.description}
+                currentIsPrivate={league.is_private}
+                currentMaxMembers={league.max_members}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -118,7 +216,7 @@ const LeagueDetail = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Members</p>
-                  <p className="text-2xl font-bold">{league.members}</p>
+                  <p className="text-2xl font-bold">{memberCount || 0}</p>
                 </div>
                 <Users className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -128,8 +226,8 @@ const LeagueDetail = () => {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Entry Fee</p>
-                  <p className="text-2xl font-bold">{league.entryFee}</p>
+                  <p className="text-sm text-muted-foreground">Max Members</p>
+                  <p className="text-2xl font-bold">{league.max_members || "Unlimited"}</p>
                 </div>
                 <DollarSign className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -140,7 +238,7 @@ const LeagueDetail = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="text-2xl font-bold">{league.created}</p>
+                  <p className="text-2xl font-bold">{format(new Date(league.created_at), "MMM d, yyyy")}</p>
                 </div>
                 <Calendar className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -151,7 +249,7 @@ const LeagueDetail = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Privacy</p>
-                  <p className="text-2xl font-bold">{league.privacy}</p>
+                  <p className="text-2xl font-bold">{league.is_private ? "Private" : "Public"}</p>
                 </div>
                 <Trophy className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -278,42 +376,56 @@ const LeagueDetail = () => {
               <CardContent className="space-y-6">
                 <div>
                   <h3 className="font-semibold mb-2">Description</h3>
-                  <p className="text-muted-foreground">{league.description}</p>
+                  <p className="text-muted-foreground">{league.description || "No description provided"}</p>
                 </div>
                 <Separator />
+                {league.is_private && league.invite_code && (
+                  <>
+                    <div>
+                      <h3 className="font-semibold mb-2">Invite Code</h3>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-muted px-4 py-2 rounded-md font-mono text-lg tracking-wider">
+                          {league.invite_code}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={copyInviteCode}
+                        >
+                          {copiedCode ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Share this code with others to invite them to the league
+                      </p>
+                    </div>
+                    <Separator />
+                  </>
+                )}
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <h3 className="font-semibold mb-2">Entry Fee</h3>
-                    <p className="text-muted-foreground">{league.entryFee} per member</p>
+                    <h3 className="font-semibold mb-2">Privacy</h3>
+                    <p className="text-muted-foreground">{league.is_private ? "Private" : "Public"} league</p>
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-2">Privacy</h3>
-                    <p className="text-muted-foreground">{league.privacy} league</p>
+                    <h3 className="font-semibold mb-2">Max Members</h3>
+                    <p className="text-muted-foreground">{league.max_members || "Unlimited"}</p>
                   </div>
                   <div>
                     <h3 className="font-semibold mb-2">Created</h3>
-                    <p className="text-muted-foreground">{league.created}</p>
+                    <p className="text-muted-foreground">{format(new Date(league.created_at), "MMM d, yyyy")}</p>
                   </div>
                   <div>
                     <h3 className="font-semibold mb-2">Total Members</h3>
-                    <p className="text-muted-foreground">{league.members} active members</p>
+                    <p className="text-muted-foreground">{memberCount || 0} active members</p>
                   </div>
                 </div>
                 <Separator />
-                <div>
-                  <h3 className="font-semibold mb-2">Rules</h3>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>Minimum bet: $10</li>
-                    <li>Maximum bet: $100</li>
-                    <li>Bets must be placed 1 hour before game time</li>
-                    <li>Weekly payout for top 3 members</li>
-                  </ul>
-                </div>
-                <Separator />
                 <div className="flex gap-4">
-                  <Button variant="outline" className="flex-1">
-                    Invite Members
-                  </Button>
                   <Button variant="outline" className="flex-1">
                     Leave League
                   </Button>
