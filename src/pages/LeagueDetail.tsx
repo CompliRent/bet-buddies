@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import Header from "@/components/Header";
 import { LeagueSettingsDialog } from "@/components/LeagueSettingsDialog";
-import { ArrowLeft, Trophy, TrendingUp, TrendingDown, Users, Calendar, DollarSign, Copy, Check } from "lucide-react";
+import { ArrowLeft, Trophy, TrendingUp, TrendingDown, Users, Calendar, DollarSign, Copy, Check, Ticket } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -242,15 +242,23 @@ const LeagueDetail = () => {
               <h1 className="text-3xl font-bold text-foreground">{league.name}</h1>
               <p className="text-muted-foreground mt-2">{league.description || "No description"}</p>
             </div>
-            {isOwner && (
-              <LeagueSettingsDialog
-                leagueId={league.id}
-                currentName={league.name}
-                currentDescription={league.description}
-                currentIsPrivate={league.is_private}
-                currentMaxMembers={league.max_members}
-              />
-            )}
+            <div className="flex items-center gap-2">
+              <Link to={`/leagues/${id}/betting`}>
+                <Button className="gap-2">
+                  <Ticket className="h-4 w-4" />
+                  Make Picks
+                </Button>
+              </Link>
+              {isOwner && (
+                <LeagueSettingsDialog
+                  leagueId={league.id}
+                  currentName={league.name}
+                  currentDescription={league.description}
+                  currentIsPrivate={league.is_private}
+                  currentMaxMembers={league.max_members}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
