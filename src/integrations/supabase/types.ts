@@ -17,6 +17,7 @@ export type Database = {
       bets: {
         Row: {
           away_team_id: string
+          card_id: number | null
           created_at: string
           event_id: string
           home_team_id: string
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           away_team_id: string
+          card_id?: number | null
           created_at?: string
           event_id: string
           home_team_id: string
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           away_team_id?: string
+          card_id?: number | null
           created_at?: string
           event_id?: string
           home_team_id?: string
@@ -45,7 +48,15 @@ export type Database = {
           result?: boolean | null
           selected_team_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bets_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cards: {
         Row: {
