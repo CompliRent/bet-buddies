@@ -103,18 +103,25 @@ const LeagueDetail = () => {
     queryFn: async () => {
       if (!id) return [];
 
-      // Get all cards for this league with user profiles
-      const { data: cards, error } = await supabase
+      // Get all cards for this league
+      const { data: cards, error: cardsError } = await supabase
         .from("cards")
-        .select(`
-          user_id,
-          total_score,
-          is_completed,
-          profiles!cards_user_id_fkey (username, avatar_url)
-        `)
+        .select("user_id, total_score, is_completed")
         .eq("league_id", id);
 
-      if (error) throw error;
+      if (cardsError) throw cardsError;
+      if (!cards || cards.length === 0) return [];
+
+      // Get unique user IDs
+      const userIds = [...new Set(cards.map(c => c.user_id))];
+
+      // Get profiles for these users
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", userIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
       // Aggregate scores by user
       const userScores: Record<string, { 
@@ -125,12 +132,13 @@ const LeagueDetail = () => {
         losses: number;
       }> = {};
 
-      cards?.forEach((card: any) => {
+      cards.forEach((card) => {
         const userId = card.user_id;
+        const profile = profileMap.get(userId);
         if (!userScores[userId]) {
           userScores[userId] = {
-            username: card.profiles?.username || "Unknown",
-            avatarUrl: card.profiles?.avatar_url,
+            username: profile?.username || "Unknown",
+            avatarUrl: profile?.avatar_url || null,
             totalScore: 0,
             wins: 0,
             losses: 0,
@@ -139,29 +147,10 @@ const LeagueDetail = () => {
         userScores[userId].totalScore += card.total_score || 0;
       });
 
-      // Get bet results for win/loss counts
-      const { data: bets } = await supabase
-        .from("bets")
-        .select(`
-          result,
-          cards!bets_card_id_fkey (user_id, league_id)
-        `)
-        .not("result", "is", null);
-
-      bets?.forEach((bet: any) => {
-        if (bet.cards?.league_id === id && userScores[bet.cards.user_id]) {
-          if (bet.result === true) {
-            userScores[bet.cards.user_id].wins++;
-          } else if (bet.result === false) {
-            userScores[bet.cards.user_id].losses++;
-          }
-        }
-      });
-
       // Convert to array and sort by total score
       return Object.entries(userScores)
-        .map(([userId, data], index) => ({
-          rank: index + 1,
+        .map(([userId, data]) => ({
+          rank: 1,
           username: data.username,
           avatarUrl: data.avatarUrl,
           wins: data.wins,
@@ -183,40 +172,49 @@ const LeagueDetail = () => {
     queryFn: async () => {
       if (!id) return [];
 
-      const { data, error } = await supabase
+      // Get cards for this league first
+      const { data: leagueCards } = await supabase
+        .from("cards")
+        .select("id, user_id")
+        .eq("league_id", id);
+
+      if (!leagueCards || leagueCards.length === 0) return [];
+
+      const cardIds = leagueCards.map(c => c.id);
+      const userIds = [...new Set(leagueCards.map(c => c.user_id))];
+
+      // Get profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", userIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      const cardUserMap = new Map(leagueCards.map(c => [c.id, c.user_id]));
+
+      // Get bets for these cards
+      const { data: bets, error } = await supabase
         .from("bets")
-        .select(`
-          id,
-          event_id,
-          selected_team_id,
-          home_team_id,
-          away_team_id,
-          line,
-          result,
-          created_at,
-          cards!bets_card_id_fkey (
-            user_id,
-            league_id,
-            profiles!cards_user_id_fkey (username, avatar_url)
-          )
-        `)
+        .select("id, event_id, selected_team_id, home_team_id, away_team_id, line, result, created_at, card_id")
+        .in("card_id", cardIds)
         .order("created_at", { ascending: false })
         .limit(20);
 
       if (error) throw error;
 
-      // Filter to only bets from this league and format
-      return data
-        ?.filter((bet: any) => bet.cards?.league_id === id)
-        .map((bet: any) => ({
+      return bets?.map((bet) => {
+        const userId = cardUserMap.get(bet.card_id);
+        const profile = userId ? profileMap.get(userId) : null;
+        return {
           id: bet.id,
-          username: bet.cards?.profiles?.username || "Unknown",
+          username: profile?.username || "Unknown",
           game: formatGameName(bet.home_team_id, bet.away_team_id),
           pick: formatTeamName(bet.selected_team_id),
           line: bet.line,
           status: bet.result === null ? "pending" : bet.result ? "won" : "lost",
           time: formatTimeAgo(bet.created_at),
-        })) || [];
+        };
+      }) || [];
     },
     enabled: !!id,
   });
@@ -413,58 +411,77 @@ const LeagueDetail = () => {
                 <CardDescription>Current standings for all league members</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {leaderboard.map((member) => (
-                    <div key={member.rank}>
-                      <div className="flex items-center justify-between py-3">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center justify-center w-8">
-                            {member.rank <= 3 ? (
-                              <Trophy
-                                className={`h-5 w-5 ${
-                                  member.rank === 1
-                                    ? "text-yellow-500"
-                                    : member.rank === 2
-                                    ? "text-gray-400"
-                                    : "text-amber-600"
-                                }`}
-                              />
-                            ) : (
-                              <span className="text-sm font-medium text-muted-foreground">#{member.rank}</span>
-                            )}
-                          </div>
-                          <Avatar>
-                            <AvatarFallback>{member.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{member.username}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {member.wins}W - {member.losses}L
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">Win Rate</p>
-                            <div className="flex items-center gap-1">
-                              {member.winRate >= 50 ? (
-                                <TrendingUp className="h-4 w-4 text-green-500" />
+                {leaderboardLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : leaderboard.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No picks submitted yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Be the first to make your picks!
+                    </p>
+                    <Link to={`/leagues/${id}/betting`}>
+                      <Button className="mt-4">Make Picks</Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {leaderboard.map((member) => (
+                      <div key={member.rank}>
+                        <div className="flex items-center justify-between py-3">
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center justify-center w-8">
+                              {member.rank <= 3 ? (
+                                <Trophy
+                                  className={`h-5 w-5 ${
+                                    member.rank === 1
+                                      ? "text-yellow-500"
+                                      : member.rank === 2
+                                      ? "text-gray-400"
+                                      : "text-amber-600"
+                                  }`}
+                                />
                               ) : (
-                                <TrendingDown className="h-4 w-4 text-red-500" />
+                                <span className="text-sm font-medium text-muted-foreground">#{member.rank}</span>
                               )}
-                              <p className="font-semibold">{member.winRate}%</p>
+                            </div>
+                            <Avatar>
+                              <AvatarFallback>{member.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{member.username}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {member.wins}W - {member.losses}L
+                              </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">Points</p>
-                            <p className="font-bold text-lg">{member.points}</p>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">Win Rate</p>
+                              <div className="flex items-center gap-1">
+                                {member.winRate >= 50 ? (
+                                  <TrendingUp className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <TrendingDown className="h-4 w-4 text-red-500" />
+                                )}
+                                <p className="font-semibold">{member.winRate}%</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">Points</p>
+                              <p className="font-bold text-lg">{member.points}</p>
+                            </div>
                           </div>
                         </div>
+                        {member.rank < leaderboard.length && <Separator />}
                       </div>
-                      {member.rank < leaderboard.length && <Separator />}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -477,31 +494,47 @@ const LeagueDetail = () => {
                 <CardDescription>Latest bets placed by league members</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentBets.map((bet) => (
-                    <div key={bet.id}>
-                      <div className="flex items-start justify-between py-3">
-                        <div className="flex items-start gap-4">
-                          <Avatar>
-                            <AvatarFallback>{bet.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div className="space-y-1">
-                            <p className="font-medium">{bet.username}</p>
-                            <p className="text-sm text-muted-foreground">{bet.game}</p>
-                            <p className="text-sm">
-                              <span className="text-foreground font-medium">{bet.pick}</span> · {formatMoneyline(bet.line)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{bet.time}</p>
+                {betsLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
+                ) : recentBets.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Ticket className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No bets placed yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Bets will appear here once members make their picks
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentBets.map((bet, index) => (
+                      <div key={bet.id}>
+                        <div className="flex items-start justify-between py-3">
+                          <div className="flex items-start gap-4">
+                            <Avatar>
+                              <AvatarFallback>{bet.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="space-y-1">
+                              <p className="font-medium">{bet.username}</p>
+                              <p className="text-sm text-muted-foreground">{bet.game}</p>
+                              <p className="text-sm">
+                                <span className="text-foreground font-medium">{bet.pick}</span> · {formatMoneyline(bet.line)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{bet.time}</p>
+                            </div>
                           </div>
+                          <Badge variant="outline" className={getStatusColor(bet.status)}>
+                            {bet.status.toUpperCase()}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className={getStatusColor(bet.status)}>
-                          {bet.status.toUpperCase()}
-                        </Badge>
+                        {index < recentBets.length - 1 && <Separator />}
                       </div>
-                      {bet.id < recentBets.length && <Separator />}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
