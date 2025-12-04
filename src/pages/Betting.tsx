@@ -145,10 +145,18 @@ const Betting = () => {
     }
   }, [isEditing, existingBets, events, editableBetEventIds]);
 
+  // Check if we're past the betting window (no upcoming events = week is over)
+  const canMakePicks = events && events.length > 0;
+
   // Submit/Update card mutation
   const submitCardMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id || !leagueId || !league) throw new Error("Not authenticated");
+
+      // Prevent submitting cards when no games are available
+      if (!canMakePicks) {
+        throw new Error("Betting is closed - no upcoming games available");
+      }
 
       const betsArray = Object.values(selections);
       const totalPicks = betsArray.length + lockedBets.length;
@@ -317,10 +325,17 @@ const Betting = () => {
                   Week {existingCard.week_number} ({weekDateRange}) • {existingBets?.length || 0} picks
                 </p>
               </div>
-              <Button onClick={handleStartEditing} variant="outline" className="gap-2 self-start">
-                <Edit className="h-4 w-4" />
-                Edit Picks
-              </Button>
+              {canMakePicks ? (
+                <Button onClick={handleStartEditing} variant="outline" className="gap-2 self-start">
+                  <Edit className="h-4 w-4" />
+                  Edit Picks
+                </Button>
+              ) : (
+                <Badge variant="secondary" className="gap-2 py-2 px-3 self-start">
+                  <Lock className="h-4 w-4" />
+                  Week Closed
+                </Badge>
+              )}
             </div>
           </div>
         </div>
