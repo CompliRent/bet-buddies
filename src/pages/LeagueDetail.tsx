@@ -20,7 +20,8 @@ import {
 import Header from "@/components/Header";
 import { LeagueSettingsDialog } from "@/components/LeagueSettingsDialog";
 import { CardHistory } from "@/components/CardHistory";
-import { ArrowLeft, Trophy, TrendingUp, TrendingDown, Users, Calendar, DollarSign, Copy, Check, Ticket } from "lucide-react";
+import { LeagueLeaderboard } from "@/components/LeagueLeaderboard";
+import { ArrowLeft, Users, Calendar, DollarSign, Copy, Check, Ticket, Trophy } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -98,94 +99,6 @@ const LeagueDetail = () => {
     enabled: !!id && !!user?.id,
   });
 
-  // Fetch leaderboard data from cards with bet results
-  const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
-    queryKey: ["league-leaderboard", id],
-    queryFn: async () => {
-      if (!id) return [];
-
-      // Get all cards for this league
-      const { data: cards, error: cardsError } = await supabase
-        .from("cards")
-        .select("id, user_id, total_score")
-        .eq("league_id", id);
-
-      if (cardsError) throw cardsError;
-      if (!cards || cards.length === 0) return [];
-
-      const cardIds = cards.map(c => c.id);
-      const userIds = [...new Set(cards.map(c => c.user_id))];
-
-      // Get bets for these cards to calculate wins/losses
-      const { data: bets } = await supabase
-        .from("bets")
-        .select("card_id, result")
-        .in("card_id", cardIds);
-
-      // Get profiles for these users
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url")
-        .in("id", userIds);
-
-      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
-      const cardUserMap = new Map(cards.map(c => [c.id, c.user_id]));
-
-      // Calculate wins/losses per user from bets
-      const userBetStats: Record<string, { wins: number; losses: number }> = {};
-      bets?.forEach((bet) => {
-        const odile = cardUserMap.get(bet.card_id);
-        if (odile) {
-          if (!userBetStats[odile]) {
-            userBetStats[odile] = { wins: 0, losses: 0 };
-          }
-          if (bet.result === true) userBetStats[odile].wins++;
-          else if (bet.result === false) userBetStats[odile].losses++;
-        }
-      });
-
-      // Aggregate scores by user
-      const userScores: Record<string, { 
-        username: string; 
-        avatarUrl: string | null;
-        totalScore: number; 
-      }> = {};
-
-      cards.forEach((card) => {
-        const odile = card.user_id;
-        const profile = profileMap.get(odile);
-        if (!userScores[odile]) {
-          userScores[odile] = {
-            username: profile?.username || "Unknown",
-            avatarUrl: profile?.avatar_url || null,
-            totalScore: 0,
-          };
-        }
-        userScores[odile].totalScore += card.total_score || 0;
-      });
-
-      // Convert to array and sort by total score
-      return Object.entries(userScores)
-        .map(([odile, data]) => {
-          const stats = userBetStats[odile] || { wins: 0, losses: 0 };
-          return {
-            odile,
-            rank: 1,
-            username: data.username,
-            avatarUrl: data.avatarUrl,
-            wins: stats.wins,
-            losses: stats.losses,
-            winRate: stats.wins + stats.losses > 0 
-              ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100) 
-              : 0,
-            points: data.totalScore,
-          };
-        })
-        .sort((a, b) => b.points - a.points)
-        .map((item, index) => ({ ...item, rank: index + 1 }));
-    },
-    enabled: !!id,
-  });
 
   // Fetch league members
   const { data: membersData, isLoading: membersLoading } = useQuery({
@@ -279,7 +192,6 @@ const LeagueDetail = () => {
     enabled: !!id,
   });
 
-  const leaderboard = leaderboardData || [];
   const recentBets = recentBetsData || [];
 
   const getStatusColor = (status: string) => {
@@ -467,88 +379,7 @@ const LeagueDetail = () => {
 
           {/* Leaderboard Tab */}
           <TabsContent value="leaderboard">
-            <Card>
-              <CardHeader>
-                <CardTitle>Rankings</CardTitle>
-                <CardDescription>Current standings for all league members</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {leaderboardLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
-                    ))}
-                  </div>
-                ) : leaderboard.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Trophy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No picks submitted yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Be the first to make your picks!
-                    </p>
-                    <Link to={`/leagues/${id}/betting`}>
-                      <Button className="mt-4">Make Picks</Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {leaderboard.map((member) => (
-                      <div key={member.odile}>
-                        <Link 
-                          to={`/leagues/${id}/member/${member.odile}`}
-                          className="flex items-center justify-between py-3 hover:bg-muted/50 -mx-2 px-2 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center justify-center w-8">
-                              {member.rank <= 3 ? (
-                                <Trophy
-                                  className={`h-5 w-5 ${
-                                    member.rank === 1
-                                      ? "text-yellow-500"
-                                      : member.rank === 2
-                                      ? "text-gray-400"
-                                      : "text-amber-600"
-                                  }`}
-                                />
-                              ) : (
-                                <span className="text-sm font-medium text-muted-foreground">#{member.rank}</span>
-                              )}
-                            </div>
-                            <Avatar>
-                              <AvatarFallback>{member.username.substring(0, 2).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium hover:underline">{member.username}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {member.wins}W - {member.losses}L
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-6">
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">Win Rate</p>
-                              <div className="flex items-center gap-1">
-                                {member.winRate >= 50 ? (
-                                  <TrendingUp className="h-4 w-4 text-green-500" />
-                                ) : (
-                                  <TrendingDown className="h-4 w-4 text-red-500" />
-                                )}
-                                <p className="font-semibold">{member.winRate}%</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">Points</p>
-                              <p className="font-bold text-lg">{member.points}</p>
-                            </div>
-                          </div>
-                        </Link>
-                        {member.rank < leaderboard.length && <Separator />}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <LeagueLeaderboard leagueId={id!} leagueCreatedAt={league.created_at} />
           </TabsContent>
 
           {/* Members Tab */}
