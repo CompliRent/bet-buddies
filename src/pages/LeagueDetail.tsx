@@ -21,7 +21,7 @@ import Header from "@/components/Header";
 import { LeagueSettingsDialog } from "@/components/LeagueSettingsDialog";
 import { CardHistory } from "@/components/CardHistory";
 import { LeagueLeaderboard } from "@/components/LeagueLeaderboard";
-import { ArrowLeft, Users, Calendar, DollarSign, Copy, Check, Ticket, Trophy } from "lucide-react";
+import { ArrowLeft, Users, Calendar, Copy, Check, Ticket, Trophy } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -301,7 +301,7 @@ const LeagueDetail = () => {
               <Link to={`/leagues/${id}/betting`}>
                 <Button className="gap-2">
                   <Ticket className="h-4 w-4" />
-                  <span className="hidden sm:inline">Make</span> Picks
+                  <span className="hidden sm:inline">View</span> Picks
                 </Button>
               </Link>
               {isOwner && (
@@ -319,54 +319,6 @@ const LeagueDetail = () => {
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        {/* League Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Members</p>
-                  <p className="text-2xl font-bold">{memberCount || 0}</p>
-                </div>
-                <Users className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Max Members</p>
-                  <p className="text-2xl font-bold">{league.max_members || "Unlimited"}</p>
-                </div>
-                <DollarSign className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="text-2xl font-bold">{format(new Date(league.created_at), "MMM d, yyyy")}</p>
-                </div>
-                <Calendar className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Privacy</p>
-                  <p className="text-2xl font-bold">{league.is_private ? "Private" : "Public"}</p>
-                </div>
-                <Trophy className="h-8 w-8 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Tabs */}
         <Tabs defaultValue="leaderboard" className="w-full">
           <TabsList className="w-full flex overflow-x-auto mb-6 h-auto flex-wrap sm:flex-nowrap">
