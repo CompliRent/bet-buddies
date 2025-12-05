@@ -1,8 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
@@ -18,7 +21,7 @@ const Index = () => {
           Connect with friends, share predictions, and win together
         </p>
         <div className="flex gap-4 justify-center">
-          <Link to="/auth">
+          <Link to={user ? "/leagues" : "/auth"}>
             <Button 
               size="lg" 
               className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-glow"
@@ -26,12 +29,6 @@ const Index = () => {
               Get Started
             </Button>
           </Link>
-          <Button 
-            size="lg" 
-            variant="outline"
-          >
-            Learn More
-          </Button>
         </div>
       </div>
       </div>
