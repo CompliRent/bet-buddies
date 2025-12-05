@@ -10,7 +10,7 @@ import { WeekNavigation } from "@/components/WeekNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Lock, Trophy, CheckCircle, XCircle, Clock } from "lucide-react";
 import { formatTeamName, formatMoneyline } from "@/lib/teamUtils";
-import { getLeagueWeekNumber, formatWeekDateRange } from "@/lib/weekUtils";
+import { getLeagueWeekNumber, formatWeekDateRange, getLeagueSeasonYear } from "@/lib/weekUtils";
 
 const MemberCard = () => {
   const { leagueId, userId } = useParams();
@@ -35,15 +35,19 @@ const MemberCard = () => {
   // Calculate current week based on league creation date
   const currentWeek = league ? getLeagueWeekNumber(league.created_at) : 1;
 
-  // Get week from URL params or use current league week
+  // Get week/year from URL params or use current league week
   const selectedWeek = searchParams.get("week") ? parseInt(searchParams.get("week")!) : currentWeek;
+  const selectedYear = searchParams.get("year") 
+    ? parseInt(searchParams.get("year")!) 
+    : league ? getLeagueSeasonYear(league.created_at, selectedWeek) : new Date().getFullYear();
   
   // Get date range for display
   const weekDateRange = league ? formatWeekDateRange(league.created_at, selectedWeek) : "";
 
   // Handle week navigation
-  const handleWeekChange = (week: number) => {
-    navigate(`/leagues/${leagueId}/member/${userId}?week=${week}`);
+  const handleWeekChange = (week: number, year: number) => {
+    const newYear = league ? getLeagueSeasonYear(league.created_at, week) : year;
+    navigate(`/leagues/${leagueId}/member/${userId}?week=${week}&year=${newYear}`);
   };
 
   // Fetch member profile
@@ -61,9 +65,9 @@ const MemberCard = () => {
     enabled: !!userId,
   });
 
-  // Fetch member's card for selected week (week_number is league-relative, no season_year filter needed)
+  // Fetch member's card for selected week
   const { data: memberCard, isLoading: cardLoading } = useQuery({
-    queryKey: ["member-card", leagueId, userId, selectedWeek],
+    queryKey: ["member-card", leagueId, userId, selectedWeek, selectedYear],
     queryFn: async () => {
       if (!leagueId || !userId) return null;
       const { data, error } = await supabase
@@ -72,6 +76,7 @@ const MemberCard = () => {
         .eq("user_id", userId)
         .eq("league_id", leagueId)
         .eq("week_number", selectedWeek)
+        .eq("season_year", selectedYear)
         .maybeSingle();
       if (error) throw error;
       return data;
@@ -169,6 +174,7 @@ const MemberCard = () => {
               <WeekNavigation
                 currentWeek={currentWeek}
                 selectedWeek={selectedWeek}
+                selectedYear={selectedYear}
                 onWeekChange={handleWeekChange}
                 weekDateRange={weekDateRange}
               />

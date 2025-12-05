@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 interface WeekNavigationProps {
   currentWeek: number;
   selectedWeek: number;
-  onWeekChange: (week: number) => void;
+  selectedYear: number;
+  onWeekChange: (week: number, year: number) => void;
   weekDateRange?: string;
 }
 
 export const WeekNavigation = ({
   currentWeek,
   selectedWeek,
+  selectedYear,
   onWeekChange,
   weekDateRange,
 }: WeekNavigationProps) => {
@@ -19,13 +21,13 @@ export const WeekNavigation = ({
 
   const handlePrev = () => {
     if (canGoPrev) {
-      onWeekChange(selectedWeek - 1);
+      onWeekChange(selectedWeek - 1, selectedYear);
     }
   };
 
   const handleNext = () => {
     if (canGoNext) {
-      onWeekChange(selectedWeek + 1);
+      onWeekChange(selectedWeek + 1, selectedYear);
     }
   };
 
