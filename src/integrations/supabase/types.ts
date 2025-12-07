@@ -17,6 +17,7 @@ export type Database = {
       bets: {
         Row: {
           away_team_id: string
+          bet_type: Database["public"]["Enums"]["bet_type"]
           card_id: number | null
           created_at: string
           event_id: string
@@ -24,10 +25,13 @@ export type Database = {
           id: number
           line: number
           result: boolean | null
-          selected_team_id: string
+          selection: string
+          spread_value: number | null
+          total_value: number | null
         }
         Insert: {
           away_team_id: string
+          bet_type: Database["public"]["Enums"]["bet_type"]
           card_id?: number | null
           created_at?: string
           event_id: string
@@ -35,10 +39,13 @@ export type Database = {
           id?: number
           line: number
           result?: boolean | null
-          selected_team_id: string
+          selection: string
+          spread_value?: number | null
+          total_value?: number | null
         }
         Update: {
           away_team_id?: string
+          bet_type?: Database["public"]["Enums"]["bet_type"]
           card_id?: number | null
           created_at?: string
           event_id?: string
@@ -46,7 +53,9 @@ export type Database = {
           id?: number
           line?: number
           result?: boolean | null
-          selected_team_id?: string
+          selection?: string
+          spread_value?: number | null
+          total_value?: number | null
         }
         Relationships: [
           {
@@ -224,32 +233,50 @@ export type Database = {
       upcoming_events: {
         Row: {
           away_moneyline: number
+          away_spread_odds: number | null
           away_team_id: string
           created_at: string
           event_id: string
           home_moneyline: number
+          home_spread_odds: number | null
+          home_spread_value: number | null
           home_team_id: string
           id: number
+          ou_over_odds: number | null
+          ou_under_odds: number | null
+          ou_value: number | null
           start_date: string
         }
         Insert: {
           away_moneyline: number
+          away_spread_odds?: number | null
           away_team_id: string
           created_at?: string
           event_id: string
           home_moneyline: number
+          home_spread_odds?: number | null
+          home_spread_value?: number | null
           home_team_id: string
           id?: number
+          ou_over_odds?: number | null
+          ou_under_odds?: number | null
+          ou_value?: number | null
           start_date: string
         }
         Update: {
           away_moneyline?: number
+          away_spread_odds?: number | null
           away_team_id?: string
           created_at?: string
           event_id?: string
           home_moneyline?: number
+          home_spread_odds?: number | null
+          home_spread_value?: number | null
           home_team_id?: string
           id?: number
+          ou_over_odds?: number | null
+          ou_under_odds?: number | null
+          ou_value?: number | null
           start_date?: string
         }
         Relationships: []
@@ -273,6 +300,7 @@ export type Database = {
       }
     }
     Enums: {
+      bet_type: "moneyline" | "over_under" | "spread"
       league_role: "owner" | "admin" | "member"
     }
     CompositeTypes: {
@@ -401,6 +429,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      bet_type: ["moneyline", "over_under", "spread"],
       league_role: ["owner", "admin", "member"],
     },
   },

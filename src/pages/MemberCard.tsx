@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WeekNavigation } from "@/components/WeekNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Lock, Trophy, CheckCircle, XCircle, Clock } from "lucide-react";
-import { formatTeamName, formatMoneyline } from "@/lib/teamUtils";
+import { formatTeamName, formatBetTypeBadge, formatBetDisplay } from "@/lib/teamUtils";
 import { getLeagueWeekNumber, formatWeekDateRange, getLeagueSeasonYear } from "@/lib/weekUtils";
 
 const MemberCard = () => {
@@ -250,24 +250,32 @@ const MemberCard = () => {
             {bets.map((bet) => {
               const isUpcoming = upcomingEventIds.has(bet.event_id);
               const isLocked = !isUpcoming;
+              const { primary, secondary } = formatBetDisplay(
+                bet.bet_type,
+                bet.selection,
+                Number(bet.line),
+                bet.spread_value,
+                bet.total_value
+              );
               
               return (
                 <Card key={bet.id} className="overflow-hidden">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-3">
-                      {getResultIcon(bet.result, isLocked)}
+                      <div className="flex items-center gap-2">
+                        {getResultIcon(bet.result, isLocked)}
+                        <Badge variant="outline" className="text-xs">
+                          {formatBetTypeBadge(bet.bet_type)}
+                        </Badge>
+                      </div>
                       {getResultBadge(bet.result, isLocked)}
                     </div>
                     <div className="space-y-2">
-                      <p className="font-semibold text-lg">
-                        {formatTeamName(bet.selected_team_id)}
-                      </p>
+                      <p className="font-semibold text-lg">{primary}</p>
                       <p className="text-sm text-muted-foreground">
                         {formatTeamName(bet.away_team_id)} @ {formatTeamName(bet.home_team_id)}
                       </p>
-                      <p className="text-sm font-mono">
-                        {formatMoneyline(Number(bet.line))}
-                      </p>
+                      <p className="text-sm font-mono">{secondary}</p>
                     </div>
                   </CardContent>
                 </Card>
