@@ -13,6 +13,7 @@ import JoinLeague from "./pages/JoinLeague";
 import Profile from "./pages/Profile";
 import Betting from "./pages/Betting";
 import MemberCard from "./pages/MemberCard";
+import HowToPlay from "./pages/HowToPlay";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/how-to-play" element={<HowToPlay />} />
             <Route path="/auth" element={<Auth />} />
             <Route
               path="/leagues"
