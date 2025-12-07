@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import { EventCard } from "@/components/EventCard";
+import { EventBettingModal, BetSelection } from "@/components/EventBettingModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,17 +13,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, AlertCircle, Edit, Lock } from "lucide-react";
-import { formatTeamName, formatMoneyline } from "@/lib/teamUtils";
+import { formatTeamName, formatMoneyline, formatBetTypeBadge, formatBetDisplay } from "@/lib/teamUtils";
 import { getLeagueWeekNumber, getLeagueSeasonYear, formatWeekDateRange } from "@/lib/weekUtils";
 
 const MAX_PICKS = 5;
 
-interface BetSelection {
-  eventId: string;
-  teamId: string;
-  line: number;
-  homeTeamId: string;
-  awayTeamId: string;
+interface Event {
+  id: number;
+  event_id: string;
+  home_team_id: string;
+  away_team_id: string;
+  home_moneyline: number;
+  away_moneyline: number;
+  home_spread_value: number | null;
+  home_spread_odds: number | null;
+  away_spread_odds: number | null;
+  ou_value: number | null;
+  ou_over_odds: number | null;
+  ou_under_odds: number | null;
+  start_date: string;
 }
 
 const Betting = () => {
@@ -33,6 +42,8 @@ const Betting = () => {
   const queryClient = useQueryClient();
   const [selections, setSelections] = useState<Record<string, BetSelection>>({});
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Fetch league info
   const { data: league } = useQuery({
@@ -59,7 +70,7 @@ const Betting = () => {
         .gte("start_date", new Date().toISOString())
         .order("start_date", { ascending: true });
       if (error) throw error;
-      return data;
+      return data as Event[];
     },
   });
 
@@ -106,7 +117,6 @@ const Betting = () => {
   const { lockedBets, editableBetEventIds } = useMemo(() => {
     if (!existingBets || !events) return { lockedBets: [], editableBetEventIds: new Set<string>() };
     
-    const now = new Date();
     const upcomingEventIds = new Set(events.map(e => e.event_id));
     
     const locked: typeof existingBets = [];
@@ -132,12 +142,16 @@ const Betting = () => {
       existingBets.forEach((bet) => {
         // Only load if the event is still upcoming
         if (editableBetEventIds.has(bet.event_id)) {
-          loadedSelections[bet.event_id] = {
+          const key = `${bet.event_id}-${bet.bet_type}`;
+          loadedSelections[key] = {
             eventId: bet.event_id,
-            teamId: bet.selected_team_id,
+            betType: bet.bet_type as 'moneyline' | 'spread' | 'over_under',
+            selection: bet.selection,
             line: Number(bet.line),
             homeTeamId: bet.home_team_id,
             awayTeamId: bet.away_team_id,
+            spreadValue: bet.spread_value ?? undefined,
+            totalValue: bet.total_value ?? undefined,
           };
         }
       });
@@ -224,10 +238,13 @@ const Betting = () => {
         const betsToInsert = betsArray.map((bet) => ({
           card_id: cardId,
           event_id: bet.eventId,
-          selected_team_id: bet.teamId,
+          bet_type: bet.betType,
+          selection: bet.selection,
           home_team_id: bet.homeTeamId,
           away_team_id: bet.awayTeamId,
           line: bet.line,
+          spread_value: bet.spreadValue ?? null,
+          total_value: bet.totalValue ?? null,
         }));
 
         const { error: betsError } = await supabase
@@ -260,19 +277,12 @@ const Betting = () => {
     },
   });
 
-  const handleSelectTeam = (eventId: string, teamId: string, line: number) => {
-    const event = events?.find((e) => e.event_id === eventId);
-    if (!event) return;
-
+  const handleSelectBet = (bet: BetSelection) => {
+    const key = `${bet.eventId}-${bet.betType}`;
     setSelections((prev) => {
-      const existing = prev[eventId];
-      // If clicking the same team, deselect
-      if (existing?.teamId === teamId) {
-        const { [eventId]: _, ...rest } = prev;
-        return rest;
-      }
+      const existing = prev[key];
       
-      // Check if we're at max picks and trying to add a new event (include locked bets in count)
+      // Check if we're at max picks and trying to add a new bet (include locked bets in count)
       const currentCount = Object.keys(prev).length + lockedBets.length;
       if (!existing && currentCount >= MAX_PICKS) {
         toast({
@@ -283,20 +293,21 @@ const Betting = () => {
         return prev;
       }
 
-      // Otherwise, select this team
-      return {
-        ...prev,
-        [eventId]: {
-          eventId,
-          teamId,
-          line,
-          homeTeamId: event.home_team_id,
-          awayTeamId: event.away_team_id,
-        },
-      };
+      return { ...prev, [key]: bet };
     });
   };
 
+  const handleRemoveBet = (key: string) => {
+    setSelections((prev) => {
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const handleCardClick = (event: Event) => {
+    setSelectedEvent(event);
+    setModalOpen(true);
+  };
 
   const handleStartEditing = () => {
     setIsEditing(true);
@@ -345,32 +356,36 @@ const Betting = () => {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {existingBets.map((bet) => {
                 const event = events?.find(e => e.event_id === bet.event_id);
-                const isLocked = !event; // If event not found in upcoming, it's locked
+                const isLocked = !event;
+                const { primary, secondary } = formatBetDisplay(
+                  bet.bet_type,
+                  bet.selection,
+                  Number(bet.line),
+                  bet.spread_value,
+                  bet.total_value
+                );
+                
                 return (
-                  <div key={bet.id} className="relative">
-                    {isLocked && (
-                      <div className="absolute top-2 right-2 z-10">
-                        <Badge variant="secondary" className="gap-1">
-                          <Lock className="h-3 w-3" />
-                          Locked
+                  <Card key={bet.id} className="overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <Badge variant="outline" className="text-xs">
+                          {formatBetTypeBadge(bet.bet_type)}
                         </Badge>
+                        {isLocked && (
+                          <Badge variant="secondary" className="gap-1">
+                            <Lock className="h-3 w-3" />
+                            Locked
+                          </Badge>
+                        )}
                       </div>
-                    )}
-                    <EventCard
-                      event={event || {
-                        id: bet.id,
-                        event_id: bet.event_id,
-                        home_team_id: bet.home_team_id,
-                        away_team_id: bet.away_team_id,
-                        home_moneyline: Number(bet.line),
-                        away_moneyline: Number(bet.line),
-                        start_date: new Date().toISOString(),
-                      }}
-                      selectedTeam={bet.selected_team_id}
-                      onSelectTeam={() => {}} // View only
-                      disabled
-                    />
-                  </div>
+                      <p className="font-semibold text-lg">{primary}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatTeamName(bet.away_team_id)} @ {formatTeamName(bet.home_team_id)}
+                      </p>
+                      <p className="text-sm font-mono mt-1">{secondary}</p>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
@@ -404,7 +419,7 @@ const Betting = () => {
                 {isEditing ? "Edit Your Picks" : "Make Your Picks"}
               </h1>
               <p className="text-sm sm:text-base text-muted-foreground mt-2">
-                Select up to {MAX_PICKS} winners for this week's games
+                Select up to {MAX_PICKS} bets for this week's games
                 {lockedBets.length > 0 && ` (${lockedBets.length} locked)`}
               </p>
             </div>
@@ -423,7 +438,7 @@ const Betting = () => {
           <Alert className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              You've selected the maximum {MAX_PICKS} picks{lockedBets.length > 0 && ` (${lockedBets.length} locked)`}. Deselect a pick to choose a different game.
+              You've selected the maximum {MAX_PICKS} picks{lockedBets.length > 0 && ` (${lockedBets.length} locked)`}. Deselect a pick to choose a different bet.
             </AlertDescription>
           </Alert>
         )}
@@ -445,23 +460,35 @@ const Betting = () => {
                   <span className="text-sm text-muted-foreground">- Games already started</span>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-60">
-                  {lockedBets.map((bet) => (
-                    <Card key={bet.id} className="overflow-hidden">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <Badge variant="secondary" className="gap-1">
-                            <Lock className="h-3 w-3" />
-                            Locked
-                          </Badge>
-                        </div>
-                        <p className="font-medium">{formatTeamName(bet.selected_team_id)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatTeamName(bet.away_team_id)} @ {formatTeamName(bet.home_team_id)}
-                        </p>
-                        <p className="text-sm font-mono mt-1">{formatMoneyline(Number(bet.line))}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
+                  {lockedBets.map((bet) => {
+                    const { primary, secondary } = formatBetDisplay(
+                      bet.bet_type,
+                      bet.selection,
+                      Number(bet.line),
+                      bet.spread_value,
+                      bet.total_value
+                    );
+                    return (
+                      <Card key={bet.id} className="overflow-hidden">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline" className="text-xs">
+                              {formatBetTypeBadge(bet.bet_type)}
+                            </Badge>
+                            <Badge variant="secondary" className="gap-1">
+                              <Lock className="h-3 w-3" />
+                              Locked
+                            </Badge>
+                          </div>
+                          <p className="font-medium">{primary}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatTeamName(bet.away_team_id)} @ {formatTeamName(bet.home_team_id)}
+                          </p>
+                          <p className="text-sm font-mono mt-1">{secondary}</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -472,9 +499,9 @@ const Betting = () => {
                 <EventCard
                   key={event.id}
                   event={event}
-                  selectedTeam={selections[event.event_id]?.teamId || null}
-                  onSelectTeam={handleSelectTeam}
-                  disabled={totalPickCount >= MAX_PICKS && !selections[event.event_id]}
+                  selections={selections}
+                  onCardClick={() => handleCardClick(event)}
+                  disabled={false}
                 />
               ))}
             </div>
@@ -522,6 +549,18 @@ const Betting = () => {
           </Card>
         )}
       </main>
+
+      {/* Betting Modal */}
+      <EventBettingModal
+        event={selectedEvent}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        selections={selections}
+        onSelectBet={handleSelectBet}
+        onRemoveBet={handleRemoveBet}
+        totalPickCount={totalPickCount}
+        maxPicks={MAX_PICKS}
+      />
     </div>
   );
 };

@@ -168,7 +168,7 @@ const LeagueDetail = () => {
       // Get bets for these cards
       const { data: bets, error } = await supabase
         .from("bets")
-        .select("id, event_id, selected_team_id, home_team_id, away_team_id, line, result, created_at, card_id")
+        .select("id, event_id, selection, bet_type, home_team_id, away_team_id, line, result, created_at, card_id, spread_value, total_value")
         .in("card_id", cardIds)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -182,7 +182,8 @@ const LeagueDetail = () => {
           id: bet.id,
           username: profile?.username || "Unknown",
           game: formatGameName(bet.home_team_id, bet.away_team_id),
-          pick: formatTeamName(bet.selected_team_id),
+          pick: formatTeamName(bet.selection),
+          betType: bet.bet_type,
           line: bet.line,
           status: bet.result === null ? "pending" : bet.result ? "won" : "lost",
           time: formatTimeAgo(bet.created_at),

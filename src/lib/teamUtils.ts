@@ -13,6 +13,55 @@ export const formatMoneyline = (odds: number): string => {
   return odds > 0 ? `+${odds}` : `${odds}`;
 };
 
+// Format spread value
+export const formatSpread = (value: number): string => {
+  return value > 0 ? `+${value}` : `${value}`;
+};
+
+// Format total (O/U) value
+export const formatTotal = (value: number): string => {
+  return value.toString();
+};
+
+// Format bet type as badge text
+export const formatBetTypeBadge = (betType: string): string => {
+  switch (betType) {
+    case 'moneyline': return 'ML';
+    case 'spread': return 'SPR';
+    case 'over_under': return 'O/U';
+    default: return betType.toUpperCase();
+  }
+};
+
+// Get display text for a bet selection
+export const formatBetDisplay = (
+  betType: string,
+  selection: string,
+  line: number,
+  spreadValue?: number | null,
+  totalValue?: number | null
+): { primary: string; secondary: string } => {
+  switch (betType) {
+    case 'moneyline':
+      return {
+        primary: formatTeamName(selection),
+        secondary: formatMoneyline(line),
+      };
+    case 'spread':
+      return {
+        primary: `${formatTeamName(selection)} ${formatSpread(spreadValue || 0)}`,
+        secondary: formatMoneyline(line),
+      };
+    case 'over_under':
+      return {
+        primary: `${selection.toUpperCase()} ${totalValue}`,
+        secondary: formatMoneyline(line),
+      };
+    default:
+      return { primary: selection, secondary: formatMoneyline(line) };
+  }
+};
+
 // Get team abbreviation
 export const getTeamAbbreviation = (teamId: string): string => {
   const teamAbbreviations: Record<string, string> = {
