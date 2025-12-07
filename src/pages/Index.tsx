@@ -20,13 +20,21 @@ const Index = () => {
         <p className="text-lg text-muted-foreground">
           Connect with friends, share predictions, and win together
         </p>
-        <div className="flex gap-4 justify-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link to={user ? "/leagues" : "/auth"}>
             <Button 
               size="lg" 
               className="bg-gradient-primary hover:opacity-90 transition-opacity shadow-glow"
             >
               Get Started
+            </Button>
+          </Link>
+          <Link to="/how-to-play">
+            <Button 
+              size="lg" 
+              variant="outline"
+            >
+              How to Play
             </Button>
           </Link>
         </div>
